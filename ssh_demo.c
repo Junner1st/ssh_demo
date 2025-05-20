@@ -716,20 +716,26 @@ int ssh_auth_password(SSH_TransportLayer *t,
                       const char *username,
                       const char *password)
 {
-    //-------------- DEBUG [V]
-    printf("[DEBUG] [ssh_auth_password] username: %s\n", username);
-    printf("[DEBUG] [ssh_auth_password] password: %s\n", password);
-    //--------------
+    // //-------------- DEBUG [V]
+    // printf("[DEBUG] [ssh_auth_password] username: %s\n", username);
+    // printf("[DEBUG] [ssh_auth_password] password: %s\n", password);
+    // //--------------
 
     size_t ulen = strlen(username);
     size_t plen = strlen(password);
-    size_t msg_len = 11 + ulen + plen; // "AUTH_PASS:" + username + ":" + password + '\0'
+    // //-------------- DEBUG [V]
+    // printf("[DEBUG] [ssh_auth_password] username length: %d\n", (int)ulen);
+    // printf("[DEBUG] [ssh_auth_password] password length: %d\n", (int)plen);
+    // //--------------
+
+    size_t msg_len = 12 + ulen + plen; // "AUTH_PASS:" + username + ":" + password + '\0'
     char *msg = malloc(msg_len);
     if (!msg) {
         perror("[ssh_auth_password] malloc msg failed ");
         return 0;
     }
     snprintf(msg, msg_len, "AUTH_PASS:%s:%s", username, password);
+    printf("[ssh_auth_password] [client] sending msg: %s\n", msg);
 
     if (!ssh_transport_send(t, SSH_MSG_AUTH_REQUEST,
                             (uint8_t*)msg, strlen(msg))) {
@@ -771,10 +777,14 @@ int ssh_auth_publickey(SSH_TransportLayer *t,
 int ssh_channel_send_exec(SSH_TransportLayer *t,
                           const char *command)
 {
+    printf("[ssh_channel_send_exec] [client] sending command: %s\n", command);
     size_t cmd_len = strlen(command);
-    size_t msg_len = 5 + cmd_len;  // "EXEC:" + command + '\0'
+    size_t msg_len = 6 + cmd_len;  // "EXEC:" + command + '\0'
     char *msg = malloc(msg_len);
-    if (!msg) return 0;
+    if (!msg) {
+        perror("[ssh_channel_send_exec] malloc msg failed ");
+        return 0;
+    }
     snprintf(msg, msg_len, "EXEC:%s", command);
     int ok = ssh_transport_send(t, SSH_MSG_EXEC_REQUEST,
                                 (uint8_t*)msg, strlen(msg));
@@ -937,25 +947,35 @@ int ssh_server_handle_connection(SSH_Server *srv, int client_fd) {
     uint8_t *payload = NULL;
     size_t payload_len = 0;
     int ssh_transport_recv_ok = ssh_transport_recv(t, &msg_type, &payload, &payload_len);
+    printf("[Server] payload_len: %zu\n", payload_len);
     printf("[Server] Received AUTH_REQUEST: %s\n", ssh_transport_recv_ok ? "OK" : "FAIL");
     if (!ssh_transport_recv_ok) {
         ssh_transport_free(t);
         return 0;
     }
     int auth_ok = 0;
+
     if (msg_type == SSH_MSG_AUTH_REQUEST && payload) {
-        printf("[server] Received AUTH_REQUEST: %s\n", payload);
-        payload[payload_len] = '\0';
+        printf("[Server] AUTH_REQUEST payload: %s\n", payload);
+        // payload[payload_len] = '\0';
         // Format: "AUTH_PASS:username:password"
-        if (strncmp((char*)payload, "AUTH_PASS:", 10) == 0) {
-            char *p = strchr((char*)payload + 10, ':');
-            if (p) {
-                *p = '\0';
-                const char *username = (char*)payload + 10;
-                const char *password = p + 1;
+        if (payload_len < 11) { // 至少要有 "AUTH_PASS::"
+            printf("[Server] AUTH_PASS payload too short\n");
+        } else if (strncmp((char*)payload, "AUTH_PASS:", 10) == 0) {
+            // 找到 username 和 password 的分隔點
+            char *user_start = (char*)payload + 10;
+            char *colon = memchr(user_start, ':', payload_len - 10);
+            if (colon) {
+                size_t user_len = colon - user_start;
+                size_t pass_len = payload_len - 10 - user_len - 1;
+                char username[128], password[128];
+                snprintf(username, sizeof(username), "%.*s", (int)user_len, user_start);
+                snprintf(password, sizeof(password), "%.*s", (int)pass_len, colon + 1);
+                printf("[Server] AUTH_PASS: username=%s, password=%s\n", username, password);
                 if (strcmp(username, "testuser") == 0 && strcmp(password, "testpass") == 0) {
-                    printf("[Server] AUTH_PASS: username=%s, password=%s\n", username, password);
                     auth_ok = 1;
+                } else {
+                    printf("[Server] AUTH_PASS failed: invalid username/password\n");
                 }
             }
         }
