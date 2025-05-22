@@ -270,7 +270,7 @@ int main(int argc, char *argv[]) {
             return 1;
         }
 
-        printf("Command output:\n%.*s\n", (int)out_len, output);
+        printf("\n\nCommand output:\n\n%.*s\n", (int)out_len, output);
         free(output);
         ssh_session_close(sess);
         rsa_clear_public_key(&server_key.pub);

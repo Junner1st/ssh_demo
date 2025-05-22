@@ -178,6 +178,7 @@ int ssh_transport_recv(SSH_TransportLayer *t,
  * 3) User Authentication
  *===========================================================================*/
 /**
+ * @brief Perform password authentication over an established transport.
  * Perform a simple “password” auth over an established transport:
  *  - Build payload string "AUTH_PASS:<username>:<password>"
  *  - Send with msg_type = SSH_MSG_AUTH_REQUEST.

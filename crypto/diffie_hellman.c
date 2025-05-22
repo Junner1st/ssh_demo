@@ -73,11 +73,6 @@ int dh_generate_keypair(DH_Context *ctx) {
     mpz_urandomm(ctx->priv, st, ctx->priv);
     mpz_add_ui(ctx->priv, ctx->priv, 1);
 
-    //------------ DEBUG
-    printf("[DEBUG] priv: ");
-    gmp_printf("%Zd\n", ctx->priv);
-    //------------
-
     // pub = g^priv mod p
     mpz_powm(ctx->pub, ctx->g, ctx->priv, ctx->p);
 

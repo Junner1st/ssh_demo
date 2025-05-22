@@ -15,38 +15,19 @@
 /*-----------------------------------------------------------------------------
  * Helpers: send/recv exactly N bytes over a socket
  *---------------------------------------------------------------------------*/
-// static int sock_send_all(int fd, const uint8_t *buf, size_t len) {
-//     size_t sent = 0;
-//     while (sent < len) {
-//         ssize_t n = send(fd, buf + sent, len - sent, 0);
-//         if (n <= 0) return 0;
-//         sent += n;
-//     }
-//     return 1;
-// }
-
-// static int sock_recv_all(int fd, uint8_t *buf, size_t len) {
-//     size_t recvd = 0;
-//     while (recvd < len) {
-//         ssize_t n = recv(fd, buf + recvd, len - recvd, 0);
-//         if (n <= 0) return 0;
-//         recvd += n;
-//     }
-//     return 1;
-// }
 
 static int sock_send_all(int fd, const uint8_t *buf, size_t len) {
     size_t sent = 0;
     while (sent < len) {
         ssize_t n = send(fd, buf + sent, len - sent, 0);
-        printf("[sock_send_all] sent %zd bytes\n", n);
+        // printf("[sock_send_all] sent %zd bytes\n", n);
         if (n < 0) {
             if (errno == EINTR) continue; // 被 signal 中斷，重試
-            perror("[sock_send_all] send failed ");
+            // perror("[sock_send_all] send failed ");
             return 0;
         }
         if (n == 0) {
-            printf("[sock_send_all] connection closed\n");
+            // printf("[sock_send_all] connection closed\n");
             return 0; // 連線不應關閉
         }
         sent += n;
@@ -58,7 +39,7 @@ static int sock_recv_all(int fd, uint8_t *buf, size_t len) {
     size_t recvd = 0;
     while (recvd < len) {
         ssize_t n = recv(fd, buf + recvd, len - recvd, 0);
-        printf("[sock_recv_all] recv %zd bytes\n", n);
+        // printf("[sock_recv_all] recv %zd bytes\n", n);
         if (n < 0) {
             if (errno == EINTR) continue; // 被 signal 中斷，重試
             perror("[sock_recv_all] recv failed ");
@@ -122,7 +103,6 @@ SSH_TransportLayer* ssh_transport_new(int socket_fd) {
     mpz_set_ui(t->dh.p, 23);
     mpz_set_ui(t->dh.g, 5);
     memset(t->session_key, 0, 32);
-    printf("SSH_TransportLayer created with socket_fd %d\n", t->socket_fd);
     return t;
 }
 
@@ -140,13 +120,13 @@ int ssh_transport_handshake_server(SSH_TransportLayer *t,
                                    const SSH_HostKey *hk)
 {
     /**
-     * [V] 1) Generate server DH keypair.
-     * [V] 2) Export server_pub. Sent it to client.
-     * [V] 3) Use RSA private key to sign SHA256(server_pub).
-     * [V] 4) Send [uint32 server_pub_len][server_pub][uint32 sig_len][sig] to client.
-     * [] 5) Receive client_pub [uint32 client_pub_len][client_pub].
-     * [] 6) Compute shared_secret = client_pub^priv mod p.
-     * [] 7) Derive session_key = SHA256(shared_secret).
+     * 1) Generate server DH keypair.
+     * 2) Export server_pub. Sent it to client.
+     * 3) Use RSA private key to sign SHA256(server_pub).
+     * 4) Send [uint32 server_pub_len][server_pub][uint32 sig_len][sig] to client.
+     * 5) Receive client_pub [uint32 client_pub_len][client_pub].
+     * 6) Compute shared_secret = client_pub^priv mod p.
+     * 7) Derive session_key = SHA256(shared_secret).
      */
 
     printf("[ssh_transport_handshake_server] starting handshake\n");
@@ -166,29 +146,11 @@ int ssh_transport_handshake_server(SSH_TransportLayer *t,
         return 0;
     }
 
-    //------------ DEBUG [V]
-    printf("[DEBUG] [server] &t->dh.pub: ");
-    // for (int i = 0; i < server_pub_len; i++) printf("%02x", (&t->dh.pub)[i]);
-    gmp_printf("%Zd\n", t->dh.pub);
-    printf("\n");
-    //------------
-
-    //------------ DEBUG [V]
-    printf("[DEBUG] [server] server_pub: ");
-    for (int i = 0; i < server_pub_len; i++) printf("%02x", server_pub[i]);
-    printf("\n");
-    //------------
 
     // 3) Compute SHA256(server_pub)
     printf("[ssh_transport_handshake_server] computing SHA256(server_pub)\n");
     uint8_t hash[SHA256_DIGEST_LENGTH];
     SHA256(server_pub, server_pub_len, hash);
-
-    // //------------ DEBUG [V]
-    // printf("[DEBUG] [server] hash: ");
-    // for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) printf("%02x", hash[i]);
-    // printf("\n");
-    // //------------
 
 
     // 4) Sign hash with RSA private: sig = hash^d mod n
@@ -228,14 +190,6 @@ int ssh_transport_handshake_server(SSH_TransportLayer *t,
     if (!sock_send_all(t->socket_fd, (uint8_t*)&net_sigl, 4)) goto fail;
     if (!sock_send_all(t->socket_fd, sig, sig_len)) goto fail;
 
-    // //------------ DEBUG V
-    // printf("[DEBUG] [server] server_pub: ");
-    // for (int i = 0; i < server_pub_len; i++) printf("%02x", server_pub[i]);
-    // printf("\n");
-    // printf("[DEBUG] [server] sig: ");
-    // for (int i = 0; i < sig_len; i++) printf("%02x", sig[i]);
-    // printf("\n");
-    // //------------
 
     // 6) Receive [uint32 client_pub_len][client_pub]
     printf("[ssh_transport_handshake_server] receiving client_pub_len and client_pub...\n");
@@ -249,9 +203,6 @@ int ssh_transport_handshake_server(SSH_TransportLayer *t,
         goto fail;
     }
 
-    // printf("[DEBUG] [server] client_pub: ");
-    // for (int i = 0; i < client_pub_len; i++) printf("%02x", client_pub[i]);
-    // printf("\n");
 
     // 7) Compute shared_secret = client_pub^priv mod p
     printf("[ssh_transport_handshake_server] computing shared_secret\n");
@@ -261,25 +212,6 @@ int ssh_transport_handshake_server(SSH_TransportLayer *t,
     mpz_import(client_pub_mpz, client_pub_len, 1, 1, 1, 0, client_pub);
     mpz_powm(shared_mpz, client_pub_mpz, t->dh.priv, t->dh.p);
 
-    // //------------ DEBUG [-]
-    // printf("[DEBUG] [server] : ");
-    // printf("small a = ");
-    // gmp_printf("%Zd\n", t->dh.priv);
-    // //------------
-
-    //------------ DEBUG []
-    printf("[DEBUG] [server] client_pub_mpz: ");
-    gmp_printf("%Zd\n", client_pub_mpz);
-    printf("[DEBUG] [server] t->dh.priv: ");
-    gmp_printf("%Zd\n", t->dh.priv);
-    printf("[DEBUG] [server] t->dh.p: ");
-    gmp_printf("%Zd\n", t->dh.p);
-    //------------
-
-    //------------ DEBUG [x]
-    printf("[DEBUG] [server] shared_mpz: ");
-    gmp_printf("%Zd\n", shared_mpz);
-    //------------
 
     // Export shared to bytes
     size_t shared_len = (mpz_sizeinbase(shared_mpz, 2) + 7) / 8;
@@ -294,13 +226,6 @@ int ssh_transport_handshake_server(SSH_TransportLayer *t,
 
     // Derive session_key = SHA256(shared)
     SHA256(shared, shared_len, t->session_key);
-
-    printf("[DEBUG] [server] session_key: ");
-    for (int i = 0; i < 32; i++) printf("%02x", t->session_key[i]);
-    printf("\n");
-    printf("[DEBUG] [server] shared: ");
-    for (int i = 0; i < shared_len; i++) printf("%02x", shared[i]);
-    printf("\n");
 
     // Cleanup
     printf("[ssh_transport_handshake_server] handshake complete\n");
@@ -319,21 +244,27 @@ fail:
     return 0;
 }
 
+
 /**
- * Client‐side handshake
+ * @brief handshake + RSA signature verification
+ * @details
+ * 1) Receive [uint32 srv_pub_len][srv_pub][uint32 sig_len][sig] from socket.
+ * 2) Compute SHA256(srv_pub) → verify sig with server_key->pub.
+ * 3) Import srv_pub into srv_pub_mpz.
+ * 4) Generate new t->dh keypair, export client_pub.
+ * 5) Compute shared_secret = (srv_pub)^priv mod p.
+ * 6) session_key = SHA256(shared_secret).
+ * 7) Send [uint32 client_pub_len][client_pub].
+ * 
+ * @param t             transport layer entity
+ * @param server_key    server's RSA keypair
+ * 
+ * @return              1 on success, 0 on failure
  */
 int ssh_transport_handshake_client(SSH_TransportLayer *t,
                                    const SSH_HostKey *server_key)
 {
-    /**
-     * [V] 1) Receive [uint32 srv_pub_len][srv_pub][uint32 sig_len][sig] from socket.
-     * [V] 2) Compute SHA256(srv_pub) → verify sig with server_key->pub.
-     * [] 3) Import srv_pub into t->dh.pub.
-     * [] 4) Generate new t->dh keypair, export client_pub.
-     * [] 5) Compute shared_secret = (srv_pub)^priv mod p.
-     * [] 6) session_key = SHA256(shared_secret).
-     * [] 7) Send [uint32 client_pub_len][client_pub].
-     */
+
 
     // 1) Receive [uint32 srv_pub_len][srv_pub][uint32 sig_len][sig]
     uint32_t net_spl;
@@ -342,7 +273,6 @@ int ssh_transport_handshake_client(SSH_TransportLayer *t,
         return 0;
     }
     uint32_t server_pub_len = ntohl(net_spl);
-    printf("[DEBUG] [client] [ck0] server_pub_len: %u\n", server_pub_len);
 
     uint8_t *server_pub = malloc(server_pub_len);
     if (!server_pub) {
@@ -374,15 +304,6 @@ int ssh_transport_handshake_client(SSH_TransportLayer *t,
         return 0;
     }
 
-    // //------------ DEBUG V
-    // printf("[DEBUG] [client] server_pub: ");
-    // for (int i = 0; i < server_pub_len; i++) printf("%02x", server_pub[i]);
-    // printf("\n");
-    // printf("[DEBUG] [client] sig: ");
-    // for (int i = 0; i < sig_len; i++) printf("%02x", sig[i]);
-    // printf("\n");
-    // //------------
-
     // 2) Compute SHA256(server_pub)
     uint8_t hash[SHA256_DIGEST_LENGTH];
     SHA256(server_pub, server_pub_len, hash);
@@ -408,12 +329,6 @@ int ssh_transport_handshake_client(SSH_TransportLayer *t,
         return 0;
     }
 
-    // //------------ DEBUG [V]
-    // printf("[DEBUG] [client] hash: ");
-    // for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) printf("%02x", hash[i]);
-    // printf("\n");
-    // //------------
-
     mpz_clear(sig_mpz);
     mpz_clear(dec_mpz);
     mpz_clear(hash_mpz);
@@ -424,13 +339,6 @@ int ssh_transport_handshake_client(SSH_TransportLayer *t,
     mpz_import(t->dh.pub, server_pub_len, 1, 1, 1, 0, server_pub);
     free(sig);
     
-    //------------ DEBUG []
-    printf("[DEBUG] [client] t->dh.pub: ");
-    // for (int i = 0; i < server_pub_len; i++) printf("%02x", server_pub[i]);
-    // printf("\n");
-    gmp_printf("%Zd\n", t->dh.pub);
-    printf("[DEBUG] [client] server_pub_len: %u\n", server_pub_len);
-    //------------
 
     // free(server_pub);
     // 5) Generate client DH keypair
@@ -440,59 +348,26 @@ int ssh_transport_handshake_client(SSH_TransportLayer *t,
     }
 
 
-    /// looks not right : t->dh.pub should be server_pub?
     uint8_t *client_pub = NULL;
     size_t client_pub_len = 0;
     if (!dh_export_public(&t->dh, &client_pub, &client_pub_len)) {
         printf("dh_export_public failed\n");
         return 0;
     }
-    ///---------------
 
     // 6) Compute shared_secret = server_pub^priv mod p
-    // (DH context already has server_pub in t->dh.pub)
     uint8_t *shared = NULL;
     size_t shared_len = 0;
-    // if (!dh_compute_shared(&t->dh, (const uint8_t *)NULL, 0, &shared, &shared_len)) {
-    //     // Note: dh_compute_shared expects peer buffer; but we loaded server_pub directly into t->dh.pub,
-    //     // so we compute shared manually:
-    //     mpz_t shared_mpz;
-    //     mpz_init(shared_mpz);
-    //     mpz_powm(shared_mpz, t->dh.pub, t->dh.priv, t->dh.p);
-    //     shared_len = (mpz_sizeinbase(shared_mpz, 2) + 7) / 8;
-    //     shared = malloc(shared_len);
-    //     if (!shared) {
-    //         mpz_clear(shared_mpz);
-    //         free(client_pub);
-    //         printf("malloc shared failed\n");
-    //         return 0;
-    //     }
-    //     mpz_export(shared, NULL, 1, 1, 1, 0, shared_mpz);
-    //     mpz_clear(shared_mpz);
-    // }
+
     mpz_t shared_mpz, server_pub_mpz;
     mpz_init(shared_mpz);
     mpz_init(server_pub_mpz);
-    // mpz_import(server_pub_mpz, server_pub_len, 1, 1, 1, 0, t->dh.pub);
+
+    /**
+     * @todo should make this process to dh_compute_shared function
+     */
     mpz_import(server_pub_mpz, server_pub_len, 1, 1, 1, 0, server_pub);
     mpz_powm(shared_mpz, server_pub_mpz, t->dh.priv, t->dh.p);
-    //------------ DEBUG []
-    // printf("[DEBUG] [client] server_pub_len: %u\n", server_pub_len);
-    printf("[DEBUG] [client] t->dh.pub: ");
-    gmp_printf("%Zd\n", t->dh.pub);
-    printf("[DEBUG] [client] server_pub_mpz: ");
-    gmp_printf("%Zd\n", server_pub_mpz);
-    printf("[DEBUG] [client] t->dh.priv: ");
-    gmp_printf("%Zd\n", t->dh.priv);
-    printf("[DEBUG] [client] t->dh.p: ");
-    gmp_printf("%Zd\n", t->dh.p);
-    //------------
-
-
-    //------------ DEBUG [x]
-    printf("[DEBUG] [client] shared_mpz: ");
-    gmp_printf("%Zd\n", shared_mpz);
-    //------------
 
 
     shared_len = (mpz_sizeinbase(shared_mpz, 2) + 7) / 8;
@@ -508,21 +383,11 @@ int ssh_transport_handshake_client(SSH_TransportLayer *t,
     mpz_clear(shared_mpz);
     mpz_clear(server_pub_mpz);
 
-    //------------ DEBUG []
-    printf("[DEBUG] [client] : ");
-    printf("small b = ");
-    gmp_printf("%Zd\n", t->dh.priv);
-    //------------
+
 
     // 7) Derive session_key = SHA256(shared)
     SHA256(shared, shared_len, t->session_key);
-    
-    printf("[DEBUG] [client] session_key: ");
-    for (int i = 0; i < 32; i++) printf("%02x", t->session_key[i]);
-    printf("\n");
-    printf("[DEBUG] [client] shared: ");
-    for (int i = 0; i < shared_len; i++) printf("%02x", shared[i]);
-    printf("\n");
+
     
     free(shared);
 
@@ -543,7 +408,7 @@ int ssh_transport_handshake_client(SSH_TransportLayer *t,
 }
 
 /**
- * Send a framed packet:
+ * @brief Send a framed packet
  *   [uint32 payload_len][payload][uint32 mac_len][mac]
  *   payload = [msg_type||data]
  */
@@ -566,7 +431,7 @@ int ssh_transport_send(SSH_TransportLayer *t,
 
     // Send payload_len
     uint32_t net_pl = htonl((uint32_t)payload_len);
-    printf("[ssh_transport_send] sending payload_len %u\n", payload_len);
+    //printf("[ssh_transport_send] sending payload_len %u\n", payload_len);
     if (!sock_send_all(t->socket_fd, (uint8_t*)&net_pl, 4)) {
         free(payload);
         return 0;
@@ -574,7 +439,7 @@ int ssh_transport_send(SSH_TransportLayer *t,
 
 
     // Send payload
-    printf("[ssh_transport_send] sending payload %u\n", payload);
+    //printf("[ssh_transport_send] sending payload %u\n", payload);
     if (!sock_send_all(t->socket_fd, payload, payload_len)) {
         free(payload);
         return 0;
@@ -583,19 +448,14 @@ int ssh_transport_send(SSH_TransportLayer *t,
 
     // Send mac_len
     uint32_t net_ml = htonl(mac_len);
-    printf("[ssh_transport_send] sending mac_len %u\n", mac_len);
+    //printf("[ssh_transport_send] sending mac_len %u\n", mac_len);
     if (!sock_send_all(t->socket_fd, (uint8_t*)&net_ml, 4)) {
         free(payload);
         return 0;
     }
 
     // Send mac
-    printf("[ssh_transport_send] sending mac %u\n", mac);
-    printf("[ssh_transport_send] sending mac: ");
-    for (unsigned int i = 0; i < mac_len; i++) {
-        printf("%02x", mac[i]);
-    }
-    printf("\n");
+    //printf("[ssh_transport_send] sending mac %u\n", mac);
 
     if (!sock_send_all(t->socket_fd, mac, mac_len)) {
         free(payload);
@@ -716,17 +576,9 @@ int ssh_auth_password(SSH_TransportLayer *t,
                       const char *username,
                       const char *password)
 {
-    // //-------------- DEBUG [V]
-    // printf("[DEBUG] [ssh_auth_password] username: %s\n", username);
-    // printf("[DEBUG] [ssh_auth_password] password: %s\n", password);
-    // //--------------
 
     size_t ulen = strlen(username);
     size_t plen = strlen(password);
-    // //-------------- DEBUG [V]
-    // printf("[DEBUG] [ssh_auth_password] username length: %d\n", (int)ulen);
-    // printf("[DEBUG] [ssh_auth_password] password length: %d\n", (int)plen);
-    // //--------------
 
     size_t msg_len = 12 + ulen + plen; // "AUTH_PASS:" + username + ":" + password + '\0'
     char *msg = malloc(msg_len);
@@ -735,7 +587,7 @@ int ssh_auth_password(SSH_TransportLayer *t,
         return 0;
     }
     snprintf(msg, msg_len, "AUTH_PASS:%s:%s", username, password);
-    printf("[ssh_auth_password] [client] sending msg: %s\n", msg);
+    // printf("[ssh_auth_password] [client] sending msg: %s\n", msg);
 
     if (!ssh_transport_send(t, SSH_MSG_AUTH_REQUEST,
                             (uint8_t*)msg, strlen(msg))) {
@@ -750,14 +602,14 @@ int ssh_auth_password(SSH_TransportLayer *t,
     uint8_t *resp_data = NULL;
     size_t resp_len = 0;
     if (!ssh_transport_recv(t, &resp_type, &resp_data, &resp_len)) {
-        perror("[ssh_auth_password] recv failed ");
+        perror("recv failed ");
         return 0;
     }
     int ok = 0;
     if (resp_type == SSH_MSG_AUTH_RESPONSE && resp_len == 2
         && strncmp((char*)resp_data, "OK", 2) == 0) {
         ok = 1;
-        printf("[ssh_auth_password] authentication successful\n");
+        printf("authentication successful\n");
     }
     free(resp_data);
     return ok;
@@ -777,7 +629,7 @@ int ssh_auth_publickey(SSH_TransportLayer *t,
 int ssh_channel_send_exec(SSH_TransportLayer *t,
                           const char *command)
 {
-    printf("[ssh_channel_send_exec] [client] sending command: %s\n", command);
+    // printf("[ssh_channel_send_exec] [client] sending command: %s\n", command);
     size_t cmd_len = strlen(command);
     size_t msg_len = 6 + cmd_len;  // "EXEC:" + command + '\0'
     char *msg = malloc(msg_len);
@@ -959,7 +811,7 @@ int ssh_server_handle_connection(SSH_Server *srv, int client_fd) {
         printf("[Server] AUTH_REQUEST payload: %s\n", payload);
         // payload[payload_len] = '\0';
         // Format: "AUTH_PASS:username:password"
-        if (payload_len < 11) { // 至少要有 "AUTH_PASS::"
+        if (payload_len < 11) { // at least "AUTH_PASS::" exists
             printf("[Server] AUTH_PASS payload too short\n");
         } else if (strncmp((char*)payload, "AUTH_PASS:", 10) == 0) {
             // 找到 username 和 password 的分隔點
